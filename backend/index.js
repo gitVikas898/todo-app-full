@@ -2,6 +2,9 @@ const express = require('express');
 const { createTodo, updateTodo } = require('./types');
 const { todo } = require('./db/db');
 const app = express();
+const cors = require("cors");
+const { default: mongoose } = require('mongoose');
+app.use(cors())
 app.use(express.json());
 const port = 3000
 
@@ -38,8 +41,10 @@ app.post('/todo',async function(req,res){
 
 app.put('/completed',async function(req,res){
     const id = req.body.id;
-
-    const validation = updateTodo.safeParse(id);
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+    }
+    const validation = updateTodo.safeParse({id});
 
     if(!validation.success){
         return res.status(411).json({
@@ -47,17 +52,47 @@ app.put('/completed',async function(req,res){
         })
     }
 
-    await todo.update(
-        {
-            _id:req.body.id
-        },{
-            isCompleted:true
-        })
+    const findExistingTodo = await todo.findById(id);
+    if(!findExistingTodo){
+        return res.status(404).json({message:"Todo Not Found"});
+    }
+    const updated = await todo.findByIdAndUpdate(id,
+        {isCompleted:!findExistingTodo.isCompleted},
+        {new:true}
+    );
         
     res.status(201).json({
-        message:"Updated Successfully"
+        existingTodo:findExistingTodo,
+        updatedTodo:updated
     })
 
+})
+
+app.delete('/delete',async function(req,res) {
+   const id = req.body.id;
+    if(!mongoose.Types.ObjectId.isValid(id)){
+        return res.status(400).json({
+            message:"Invalid Id"
+        })
+    }
+
+    const validation = updateTodo.safeParse({id});
+    if(!validation.success){
+        return res.status(400).json({
+            message:"Invalid Id"
+        })
+    }
+
+    const deletedTodo = await todo.findByIdAndDelete(id);
+    if(!deletedTodo){
+        return res.status(400).json({
+            message:"Delete Failed"
+        });
+    }
+
+    res.json({
+        deletedTodo
+    })
 })
 
 app.listen(port,()=>{
